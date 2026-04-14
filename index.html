@@ -3,38 +3,147 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nala and Me</title>
+  <title>Nala and Me — Prototype</title>
   <style>
-    :root { color-scheme: dark; }
-    body {
+    html, body {
       margin: 0;
-      min-height: 100vh;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas { display: block; }
+    #overlay {
+      position: absolute;
+      inset: 0;
       display: grid;
       place-items: center;
-      background: radial-gradient(circle at top, #2a2a3d 0%, #111 55%, #000 100%);
-      color: #f8e7a3;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-    .card {
-      padding: 2rem 2.5rem;
-      border: 1px solid rgba(248, 231, 163, 0.2);
-      border-radius: 20px;
-      background: rgba(255,255,255,0.04);
-      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+      background: rgba(0,0,0,0.7);
+      color: white;
+      font-family: sans-serif;
       text-align: center;
-      max-width: 680px;
+      cursor: pointer;
+      z-index: 2;
     }
-    h1 { margin: 0 0 0.75rem; font-size: clamp(2rem, 5vw, 4rem); }
-    p { margin: 0.4rem 0; font-size: 1.05rem; line-height: 1.55; }
-    .tiny { opacity: 0.8; font-size: 0.95rem; }
   </style>
 </head>
 <body>
-  <main class="card">
+<div id="overlay">
+  <div>
     <h1>Nala and Me ✨</h1>
-    <p>GitHub write test successful.</p>
-    <p>This repo is now ready to be used as the home for our game.</p>
-    <p class="tiny">Next step: turn this into a playable voxel prototype.</p>
-  </main>
+    <p>Click to start</p>
+    <p>WASD to move, mouse to look, space to jump</p>
+  </div>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87b6ff);
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const hemi = new THREE.HemisphereLight(0xbfd7ff, 0x3b4430, 1.4);
+scene.add(hemi);
+const light = new THREE.DirectionalLight(0xffffff, 1.1);
+light.position.set(5, 10, 5);
+scene.add(light);
+
+const geo = new THREE.BoxGeometry(1,1,1);
+const mats = [
+  new THREE.MeshStandardMaterial({ color: 0x67b34d }),
+  new THREE.MeshStandardMaterial({ color: 0x7a5232 }),
+  new THREE.MeshStandardMaterial({ color: 0x8f939a }),
+];
+
+function heightAt(x, z) {
+  return Math.max(1, Math.round(2 + Math.sin(x * 0.35) * 0.8 + Math.cos(z * 0.28) * 0.7));
+}
+
+for (let x = -14; x < 14; x++) {
+  for (let z = -14; z < 14; z++) {
+    const h = heightAt(x, z);
+    for (let y = 0; y < h; y++) {
+      const mesh = new THREE.Mesh(geo, y === h - 1 ? mats[0] : (y > h - 3 ? mats[1] : mats[2]));
+      mesh.position.set(x, y, z);
+      scene.add(mesh);
+    }
+  }
+}
+
+camera.position.set(0, 5, 8);
+let yaw = 0, pitch = -0.15;
+const keys = new Set();
+let velocityY = 0;
+let onGround = false;
+
+function groundHeight(x, z) {
+  return heightAt(Math.round(x), Math.round(z)) + 1.7;
+}
+
+document.addEventListener('keydown', e => keys.add(e.code));
+document.addEventListener('keyup', e => keys.delete(e.code));
+document.addEventListener('mousemove', e => {
+  if (document.pointerLockElement === renderer.domElement) {
+    yaw -= e.movementX * 0.002;
+    pitch -= e.movementY * 0.002;
+    pitch = Math.max(-1.5, Math.min(1.5, pitch));
+  }
+});
+
+document.getElementById('overlay').onclick = () => {
+  renderer.domElement.requestPointerLock();
+  document.getElementById('overlay').style.display = 'none';
+};
+
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement !== renderer.domElement) {
+    document.getElementById('overlay').style.display = 'grid';
+  }
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight')) ? 0.16 : 0.11;
+  const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+  const right = new THREE.Vector3(forward.z, 0, -forward.x);
+
+  if (keys.has('KeyW')) camera.position.addScaledVector(forward, speed);
+  if (keys.has('KeyS')) camera.position.addScaledVector(forward, -speed);
+  if (keys.has('KeyA')) camera.position.addScaledVector(right, -speed);
+  if (keys.has('KeyD')) camera.position.addScaledVector(right, speed);
+
+  velocityY -= 0.012;
+  camera.position.y += velocityY;
+  const floor = groundHeight(camera.position.x, camera.position.z);
+  if (camera.position.y < floor) {
+    camera.position.y = floor;
+    velocityY = 0;
+    onGround = true;
+  } else {
+    onGround = false;
+  }
+
+  if (keys.has('Space') && onGround) {
+    velocityY = 0.23;
+    onGround = false;
+  }
+
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
+  renderer.render(scene, camera);
+}
+
+animate();
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
 </body>
 </html>
