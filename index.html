@@ -3,8 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nala and Me — Infinite Terrain</title>
+  <title>Nala and Me — Tron UI</title>
   <style>
+    :root {
+      --cyan: #77f6ff;
+      --cyan-2: #11d6ff;
+      --amber: #ffd98a;
+      --bg: #04070d;
+      --glass: rgba(6, 12, 20, 0.68);
+      --line: rgba(119, 246, 255, 0.24);
+    }
     html, body {
       margin: 0;
       height: 100%;
@@ -18,27 +26,53 @@
       inset: 0;
       display: grid;
       place-items: center;
-      background: radial-gradient(circle at top, rgba(55,70,125,0.34), rgba(0,0,0,0.82) 58%);
+      background:
+        radial-gradient(circle at 50% 10%, rgba(17, 214, 255, 0.14), transparent 32%),
+        radial-gradient(circle at 50% 120%, rgba(255, 217, 138, 0.08), transparent 40%),
+        linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.86));
       color: white;
       text-align: center;
       cursor: pointer;
       z-index: 2;
     }
     .card {
-      background: rgba(8, 10, 18, 0.72);
-      border: 1px solid rgba(255,255,255,0.12);
+      position: relative;
+      background: var(--glass);
+      border: 1px solid var(--line);
       border-radius: 24px;
-      padding: 26px 28px;
-      width: min(680px, calc(100vw - 32px));
-      box-shadow: 0 24px 80px rgba(0,0,0,0.45);
-      backdrop-filter: blur(16px);
+      padding: 30px 32px;
+      width: min(760px, calc(100vw - 32px));
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.03) inset,
+        0 0 30px rgba(17, 214, 255, 0.12),
+        0 24px 90px rgba(0,0,0,0.46);
+      backdrop-filter: blur(18px);
+      overflow: hidden;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, transparent, rgba(119,246,255,0.08), transparent),
+        repeating-linear-gradient(180deg, transparent 0 22px, rgba(119,246,255,0.03) 22px 23px);
+      pointer-events: none;
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--cyan);
+      font-size: 0.82rem;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      opacity: 0.88;
     }
     h1 {
       margin: 0 0 12px;
-      font-size: clamp(2rem, 6vw, 4rem);
-      line-height: 0.95;
-      color: #f7e6a1;
-      letter-spacing: -0.05em;
+      font-size: clamp(2.2rem, 6vw, 4.4rem);
+      line-height: 0.93;
+      color: var(--amber);
+      letter-spacing: -0.055em;
+      text-shadow: 0 0 18px rgba(255, 217, 138, 0.25);
     }
     p {
       margin: 8px 0;
@@ -46,49 +80,92 @@
       line-height: 1.45;
     }
     .tiny {
-      color: rgba(255,255,255,0.62);
+      color: rgba(255,255,255,0.6);
       font-size: 0.94rem;
       margin-top: 12px;
     }
+    .pillrow {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .pill {
+      padding: 9px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(119,246,255,0.16);
+      background: rgba(255,255,255,0.03);
+      color: rgba(255,255,255,0.86);
+      font-size: 0.9rem;
+      box-shadow: 0 0 16px rgba(17,214,255,0.06) inset;
+    }
     #debug {
       position: absolute;
-      left: 12px;
-      bottom: 10px;
-      color: rgba(255,255,255,0.84);
-      font-size: 0.85rem;
+      left: 14px;
+      bottom: 12px;
+      color: rgba(255,255,255,0.88);
+      font-size: 0.82rem;
       z-index: 3;
-      text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+      text-shadow: 0 0 12px rgba(17, 214, 255, 0.45);
       pointer-events: none;
+      letter-spacing: 0.04em;
     }
     #crosshair {
       position: absolute;
       left: 50%;
       top: 50%;
-      width: 16px;
-      height: 16px;
-      margin-left: -8px;
-      margin-top: -8px;
+      width: 18px;
+      height: 18px;
+      margin-left: -9px;
+      margin-top: -9px;
       z-index: 3;
       pointer-events: none;
+      filter: drop-shadow(0 0 8px rgba(17,214,255,0.7));
     }
     #crosshair::before, #crosshair::after {
       content: "";
       position: absolute;
-      background: rgba(255,255,255,0.92);
-      box-shadow: 0 0 10px rgba(255,255,255,0.35);
+      background: var(--cyan);
     }
-    #crosshair::before { left: 7px; top: 0; width: 2px; height: 16px; }
-    #crosshair::after { left: 0; top: 7px; width: 16px; height: 2px; }
+    #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+    #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+    #frame {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      box-shadow: inset 0 0 120px rgba(17, 214, 255, 0.12);
+    }
+    #frame::before, #frame::after {
+      content: "";
+      position: absolute;
+      inset: 12px;
+      border: 1px solid rgba(119,246,255,0.07);
+      border-radius: 18px;
+    }
+    #frame::after {
+      inset: 22px;
+      border-color: rgba(255,217,138,0.04);
+      border-radius: 14px;
+    }
   </style>
 </head>
 <body>
+<div id="frame"></div>
 <div id="overlay">
   <div class="card">
+    <div class="eyebrow">ARES // PROTOTYPE LAYER</div>
     <h1>Nala and Me ✨</h1>
-    <p>W and S are fixed now.</p>
-    <p>You’ve got chunked infinite terrain with live loading as you move.</p>
-    <p>Click to drop in. WASD move. Mouse look. Space jump. Shift sprint.</p>
-    <p class="tiny">Next: block placing / breaking and movement feel tuning.</p>
+    <p>Tron-style UI pass for the movement sandbox.</p>
+    <p>Click to drop in. Walk the grid. Feel the loop.</p>
+    <div class="pillrow">
+      <div class="pill">WASD Move</div>
+      <div class="pill">Mouse Look</div>
+      <div class="pill">Space Jump</div>
+      <div class="pill">Shift Sprint</div>
+    </div>
+    <p class="tiny">If you can see this glow, Vercel updates are behaving exactly how we want.</p>
   </div>
 </div>
 <div id="crosshair"></div>
