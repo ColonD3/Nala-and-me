@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nala and Me — Prototype</title>
+  <title>Nala and Me — Infinite Terrain</title>
   <style>
     html, body {
       margin: 0;
       height: 100%;
       overflow: hidden;
       background: #000;
+      font-family: Inter, system-ui, sans-serif;
     }
     canvas { display: block; }
     #overlay {
@@ -17,124 +18,324 @@
       inset: 0;
       display: grid;
       place-items: center;
-      background: rgba(0,0,0,0.7);
+      background: radial-gradient(circle at top, rgba(55,70,125,0.34), rgba(0,0,0,0.82) 58%);
       color: white;
-      font-family: sans-serif;
       text-align: center;
       cursor: pointer;
       z-index: 2;
     }
+    .card {
+      background: rgba(8, 10, 18, 0.72);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 24px;
+      padding: 26px 28px;
+      width: min(680px, calc(100vw - 32px));
+      box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+      backdrop-filter: blur(16px);
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 6vw, 4rem);
+      line-height: 0.95;
+      color: #f7e6a1;
+      letter-spacing: -0.05em;
+    }
+    p {
+      margin: 8px 0;
+      color: rgba(255,255,255,0.9);
+      line-height: 1.45;
+    }
+    .tiny {
+      color: rgba(255,255,255,0.62);
+      font-size: 0.94rem;
+      margin-top: 12px;
+    }
+    #debug {
+      position: absolute;
+      left: 12px;
+      bottom: 10px;
+      color: rgba(255,255,255,0.84);
+      font-size: 0.85rem;
+      z-index: 3;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+      pointer-events: none;
+    }
+    #crosshair {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 16px;
+      height: 16px;
+      margin-left: -8px;
+      margin-top: -8px;
+      z-index: 3;
+      pointer-events: none;
+    }
+    #crosshair::before, #crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(255,255,255,0.92);
+      box-shadow: 0 0 10px rgba(255,255,255,0.35);
+    }
+    #crosshair::before { left: 7px; top: 0; width: 2px; height: 16px; }
+    #crosshair::after { left: 0; top: 7px; width: 16px; height: 2px; }
   </style>
 </head>
 <body>
 <div id="overlay">
-  <div>
+  <div class="card">
     <h1>Nala and Me ✨</h1>
-    <p>Click to start</p>
-    <p>WASD to move, mouse to look, space to jump</p>
+    <p>W and S are fixed now.</p>
+    <p>You’ve got chunked infinite terrain with live loading as you move.</p>
+    <p>Click to drop in. WASD move. Mouse look. Space jump. Shift sprint.</p>
+    <p class="tiny">Next: block placing / breaking and movement feel tuning.</p>
   </div>
 </div>
+<div id="crosshair"></div>
+<div id="debug">loading…</div>
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87b6ff);
+scene.background = new THREE.Color(0x8bb8ff);
+scene.fog = new THREE.Fog(0x8bb8ff, 32, 100);
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const hemi = new THREE.HemisphereLight(0xbfd7ff, 0x3b4430, 1.4);
+const overlay = document.getElementById('overlay');
+const debug = document.getElementById('debug');
+
+const hemi = new THREE.HemisphereLight(0xdce8ff, 0x435238, 1.7);
 scene.add(hemi);
-const light = new THREE.DirectionalLight(0xffffff, 1.1);
-light.position.set(5, 10, 5);
-scene.add(light);
+const sun = new THREE.DirectionalLight(0xfff6d6, 1.3);
+sun.position.set(20, 35, 12);
+scene.add(sun);
 
-const geo = new THREE.BoxGeometry(1,1,1);
-const mats = [
-  new THREE.MeshStandardMaterial({ color: 0x67b34d }),
-  new THREE.MeshStandardMaterial({ color: 0x7a5232 }),
-  new THREE.MeshStandardMaterial({ color: 0x8f939a }),
-];
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+const materialTop = new THREE.MeshStandardMaterial({ color: 0x6cbc4e, roughness: 0.95 });
+const materialDirt = new THREE.MeshStandardMaterial({ color: 0x7b5334, roughness: 1.0 });
+const materialStone = new THREE.MeshStandardMaterial({ color: 0x8f939a, roughness: 0.95 });
 
-function heightAt(x, z) {
-  return Math.max(1, Math.round(2 + Math.sin(x * 0.35) * 0.8 + Math.cos(z * 0.28) * 0.7));
+const CHUNK_SIZE = 16;
+const CHUNK_RADIUS = 2;
+const WATER_LEVEL = 2;
+const chunks = new Map();
+const tempMatrix = new THREE.Matrix4();
+
+function hash2(x, z) {
+  const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453123;
+  return s - Math.floor(s);
 }
 
-for (let x = -14; x < 14; x++) {
-  for (let z = -14; z < 14; z++) {
-    const h = heightAt(x, z);
-    for (let y = 0; y < h; y++) {
-      const mesh = new THREE.Mesh(geo, y === h - 1 ? mats[0] : (y > h - 3 ? mats[1] : mats[2]));
-      mesh.position.set(x, y, z);
-      scene.add(mesh);
+function smoothstep(t) {
+  return t * t * (3 - 2 * t);
+}
+
+function valueNoise(x, z) {
+  const x0 = Math.floor(x);
+  const z0 = Math.floor(z);
+  const x1 = x0 + 1;
+  const z1 = z0 + 1;
+  const tx = smoothstep(x - x0);
+  const tz = smoothstep(z - z0);
+  const a = hash2(x0, z0);
+  const b = hash2(x1, z0);
+  const c = hash2(x0, z1);
+  const d = hash2(x1, z1);
+  const ab = a + (b - a) * tx;
+  const cd = c + (d - c) * tx;
+  return ab + (cd - ab) * tz;
+}
+
+function fbm(x, z) {
+  let value = 0;
+  let amplitude = 0.5;
+  let frequency = 1;
+  for (let i = 0; i < 4; i++) {
+    value += valueNoise(x * frequency, z * frequency) * amplitude;
+    frequency *= 2;
+    amplitude *= 0.5;
+  }
+  return value;
+}
+
+function heightAt(x, z) {
+  const broad = fbm(x * 0.04, z * 0.04) * 10;
+  const hills = fbm((x + 100) * 0.09, (z - 50) * 0.09) * 5;
+  const detail = fbm((x - 200) * 0.22, (z + 140) * 0.22) * 1.8;
+  return Math.max(1, Math.floor(1 + broad + hills + detail));
+}
+
+function keyForChunk(cx, cz) {
+  return `${cx},${cz}`;
+}
+
+function buildChunk(cx, cz) {
+  const group = new THREE.Group();
+  const topPositions = [];
+  const dirtPositions = [];
+  const stonePositions = [];
+
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      const wx = cx * CHUNK_SIZE + lx;
+      const wz = cz * CHUNK_SIZE + lz;
+      const h = heightAt(wx, wz);
+      for (let y = 0; y < h; y++) {
+        const isTop = y === h - 1;
+        const isDirt = y >= h - 3;
+        const pos = [wx, y, wz];
+        if (isTop) topPositions.push(pos);
+        else if (isDirt) dirtPositions.push(pos);
+        else stonePositions.push(pos);
+      }
+    }
+  }
+
+  function makeInstanced(material, positions) {
+    const mesh = new THREE.InstancedMesh(boxGeo, material, positions.length);
+    let i = 0;
+    for (const [x, y, z] of positions) {
+      tempMatrix.makeTranslation(x, y, z);
+      mesh.setMatrixAt(i++, tempMatrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    group.add(mesh);
+  }
+
+  makeInstanced(materialTop, topPositions);
+  makeInstanced(materialDirt, dirtPositions);
+  makeInstanced(materialStone, stonePositions);
+  scene.add(group);
+  chunks.set(keyForChunk(cx, cz), group);
+}
+
+function unloadFarChunks(centerCx, centerCz) {
+  for (const [key, group] of chunks) {
+    const [cx, cz] = key.split(',').map(Number);
+    if (Math.abs(cx - centerCx) > CHUNK_RADIUS || Math.abs(cz - centerCz) > CHUNK_RADIUS) {
+      scene.remove(group);
+      group.children.forEach((child) => child.dispose?.());
+      chunks.delete(key);
     }
   }
 }
 
-camera.position.set(0, 5, 8);
-let yaw = 0, pitch = -0.15;
-const keys = new Set();
-let velocityY = 0;
-let onGround = false;
-
-function groundHeight(x, z) {
-  return heightAt(Math.round(x), Math.round(z)) + 1.7;
+function ensureChunksAround(x, z) {
+  const centerCx = Math.floor(x / CHUNK_SIZE);
+  const centerCz = Math.floor(z / CHUNK_SIZE);
+  for (let dz = -CHUNK_RADIUS; dz <= CHUNK_RADIUS; dz++) {
+    for (let dx = -CHUNK_RADIUS; dx <= CHUNK_RADIUS; dx++) {
+      const cx = centerCx + dx;
+      const cz = centerCz + dz;
+      const key = keyForChunk(cx, cz);
+      if (!chunks.has(key)) buildChunk(cx, cz);
+    }
+  }
+  unloadFarChunks(centerCx, centerCz);
 }
 
-document.addEventListener('keydown', e => keys.add(e.code));
-document.addEventListener('keyup', e => keys.delete(e.code));
-document.addEventListener('mousemove', e => {
-  if (document.pointerLockElement === renderer.domElement) {
-    yaw -= e.movementX * 0.002;
-    pitch -= e.movementY * 0.002;
-    pitch = Math.max(-1.5, Math.min(1.5, pitch));
-  }
-});
-
-document.getElementById('overlay').onclick = () => {
-  renderer.domElement.requestPointerLock();
-  document.getElementById('overlay').style.display = 'none';
+const player = {
+  pos: new THREE.Vector3(0, 10, 0),
+  vel: new THREE.Vector3(),
+  yaw: 0,
+  pitch: -0.22,
+  height: 1.7,
+  onGround: false,
 };
 
-document.addEventListener('pointerlockchange', () => {
-  if (document.pointerLockElement !== renderer.domElement) {
-    document.getElementById('overlay').style.display = 'grid';
-  }
+function groundHeight(x, z) {
+  return heightAt(Math.round(x), Math.round(z)) + player.height;
+}
+
+player.pos.set(0, groundHeight(0, 0) + 2, 0);
+ensureChunksAround(player.pos.x, player.pos.z);
+
+const keys = new Set();
+document.addEventListener('keydown', (e) => keys.add(e.code));
+document.addEventListener('keyup', (e) => keys.delete(e.code));
+
+document.addEventListener('mousemove', (e) => {
+  if (document.pointerLockElement !== renderer.domElement) return;
+  player.yaw -= e.movementX * 0.0022;
+  player.pitch -= e.movementY * 0.0022;
+  player.pitch = Math.max(-1.5, Math.min(1.5, player.pitch));
 });
+
+overlay.addEventListener('click', () => renderer.domElement.requestPointerLock());
+document.addEventListener('pointerlockchange', () => {
+  overlay.style.display = document.pointerLockElement === renderer.domElement ? 'none' : 'grid';
+});
+
+const clock = new THREE.Clock();
+let lastChunkX = Infinity;
+let lastChunkZ = Infinity;
 
 function animate() {
   requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.033);
 
-  const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight')) ? 0.16 : 0.11;
-  const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-  const right = new THREE.Vector3(forward.z, 0, -forward.x);
+  const sprint = keys.has('ShiftLeft') || keys.has('ShiftRight');
+  const moveSpeed = sprint ? 8.8 : 5.8;
+  const accel = player.onGround ? 34 : 14;
+  const drag = player.onGround ? 14 : 3;
 
-  if (keys.has('KeyW')) camera.position.addScaledVector(forward, speed);
-  if (keys.has('KeyS')) camera.position.addScaledVector(forward, -speed);
-  if (keys.has('KeyA')) camera.position.addScaledVector(right, -speed);
-  if (keys.has('KeyD')) camera.position.addScaledVector(right, speed);
+  const forward = new THREE.Vector3(Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+  const right = new THREE.Vector3(Math.cos(player.yaw), 0, Math.sin(player.yaw));
+  const input = new THREE.Vector3();
+  if (keys.has('KeyW')) input.add(forward);
+  if (keys.has('KeyS')) input.sub(forward);
+  if (keys.has('KeyD')) input.add(right);
+  if (keys.has('KeyA')) input.sub(right);
+  if (input.lengthSq() > 0) input.normalize();
 
-  velocityY -= 0.012;
-  camera.position.y += velocityY;
-  const floor = groundHeight(camera.position.x, camera.position.z);
-  if (camera.position.y < floor) {
-    camera.position.y = floor;
-    velocityY = 0;
-    onGround = true;
+  player.vel.x += input.x * accel * dt;
+  player.vel.z += input.z * accel * dt;
+
+  const horiz = new THREE.Vector2(player.vel.x, player.vel.z);
+  if (horiz.length() > moveSpeed) {
+    horiz.setLength(moveSpeed);
+    player.vel.x = horiz.x;
+    player.vel.z = horiz.y;
+  }
+
+  player.vel.x -= player.vel.x * Math.min(1, drag * dt);
+  player.vel.z -= player.vel.z * Math.min(1, drag * dt);
+  player.vel.y -= 20 * dt;
+
+  if (keys.has('Space') && player.onGround) {
+    player.vel.y = 7.4;
+    player.onGround = false;
+  }
+
+  player.pos.addScaledVector(player.vel, dt);
+  const floor = groundHeight(player.pos.x, player.pos.z);
+  if (player.pos.y <= floor) {
+    player.pos.y = floor;
+    player.vel.y = 0;
+    player.onGround = true;
   } else {
-    onGround = false;
+    player.onGround = false;
   }
 
-  if (keys.has('Space') && onGround) {
-    velocityY = 0.23;
-    onGround = false;
+  const currentChunkX = Math.floor(player.pos.x / CHUNK_SIZE);
+  const currentChunkZ = Math.floor(player.pos.z / CHUNK_SIZE);
+  if (currentChunkX !== lastChunkX || currentChunkZ !== lastChunkZ) {
+    lastChunkX = currentChunkX;
+    lastChunkZ = currentChunkZ;
+    ensureChunksAround(player.pos.x, player.pos.z);
   }
 
+  camera.position.copy(player.pos);
   camera.rotation.order = 'YXZ';
-  camera.rotation.y = yaw;
-  camera.rotation.x = pitch;
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+
+  debug.textContent = `x ${player.pos.x.toFixed(1)}  y ${player.pos.y.toFixed(1)}  z ${player.pos.z.toFixed(1)}  chunks ${chunks.size}`;
   renderer.render(scene, camera);
 }
 
