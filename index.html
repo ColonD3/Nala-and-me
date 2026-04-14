@@ -3,13 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nala and Me — Tron UI</title>
+  <title>Nala and Me — Classic Textures</title>
   <style>
     :root {
       --cyan: #77f6ff;
       --cyan-2: #11d6ff;
       --amber: #ffd98a;
-      --bg: #04070d;
       --glass: rgba(6, 12, 20, 0.68);
       --line: rgba(119, 246, 255, 0.24);
     }
@@ -155,17 +154,17 @@
 <div id="frame"></div>
 <div id="overlay">
   <div class="card">
-    <div class="eyebrow">ARES // PROTOTYPE LAYER</div>
+    <div class="eyebrow">CLASSIC // TEXTURE PASS</div>
     <h1>Nala and Me ✨</h1>
-    <p>Tron-style UI pass for the movement sandbox.</p>
-    <p>Click to drop in. Walk the grid. Feel the loop.</p>
+    <p>Minecraft-style pixel textures are in now.</p>
+    <p>Grass, dirt, and stone should read way more like a real block world.</p>
     <div class="pillrow">
       <div class="pill">WASD Move</div>
       <div class="pill">Mouse Look</div>
       <div class="pill">Space Jump</div>
       <div class="pill">Shift Sprint</div>
     </div>
-    <p class="tiny">If you can see this glow, Vercel updates are behaving exactly how we want.</p>
+    <p class="tiny">This is still our same sandbox, just a lot less placeholder-looking.</p>
   </div>
 </div>
 <div id="crosshair"></div>
@@ -192,11 +191,129 @@ const sun = new THREE.DirectionalLight(0xfff6d6, 1.3);
 sun.position.set(20, 35, 12);
 scene.add(sun);
 
-const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-const materialTop = new THREE.MeshStandardMaterial({ color: 0x6cbc4e, roughness: 0.95 });
-const materialDirt = new THREE.MeshStandardMaterial({ color: 0x7b5334, roughness: 1.0 });
-const materialStone = new THREE.MeshStandardMaterial({ color: 0x8f939a, roughness: 0.95 });
+function mulberry32(seed) {
+  let t = seed >>> 0;
+  return function() {
+    t += 0x6D2B79F5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
+function shadeHex(hex, amt) {
+  const c = new THREE.Color(hex);
+  c.r = Math.min(1, Math.max(0, c.r + amt));
+  c.g = Math.min(1, Math.max(0, c.g + amt));
+  c.b = Math.min(1, Math.max(0, c.b + amt));
+  return `#${c.getHexString()}`;
+}
+
+function makePixelTexture(baseHex, opts = {}) {
+  const size = opts.size ?? 16;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const rng = mulberry32(opts.seed ?? 1);
+
+  ctx.fillStyle = baseHex;
+  ctx.fillRect(0, 0, size, size);
+
+  const flecks = opts.flecks ?? 36;
+  for (let i = 0; i < flecks; i++) {
+    const x = Math.floor(rng() * size);
+    const y = Math.floor(rng() * size);
+    const bright = rng() > 0.5;
+    ctx.fillStyle = shadeHex(baseHex, bright ? 0.08 : -0.08);
+    ctx.fillRect(x, y, 1, 1);
+  }
+
+  if (opts.gradientTop) {
+    ctx.fillStyle = opts.gradientTop;
+    ctx.fillRect(0, 0, size, Math.max(1, Math.floor(size * 0.18)));
+  }
+  if (opts.gradientBottom) {
+    ctx.fillStyle = opts.gradientBottom;
+    ctx.fillRect(0, size - Math.max(1, Math.floor(size * 0.18)), size, Math.max(1, Math.floor(size * 0.18)));
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+}
+
+function makeGrassSideTexture() {
+  const size = 16;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const rng = mulberry32(777);
+
+  ctx.fillStyle = '#7a5435';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 30; i++) {
+    ctx.fillStyle = rng() > 0.5 ? '#8a6040' : '#6b462b';
+    ctx.fillRect(Math.floor(rng() * size), Math.floor(rng() * size), 1, 1);
+  }
+
+  ctx.fillStyle = '#70bf4a';
+  ctx.fillRect(0, 0, size, 5);
+  for (let i = 0; i < 34; i++) {
+    const x = Math.floor(rng() * size);
+    const y = Math.floor(rng() * 6);
+    ctx.fillStyle = rng() > 0.45 ? '#82d45a' : '#58a63a';
+    ctx.fillRect(x, y, 1, 1);
+  }
+  for (let i = 0; i < 8; i++) {
+    const x = Math.floor(rng() * size);
+    const drip = 5 + Math.floor(rng() * 2);
+    ctx.fillStyle = rng() > 0.5 ? '#6fc148' : '#5ea93d';
+    ctx.fillRect(x, 4, 1, drip);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
+const texGrassTop = makePixelTexture('#69b749', {
+  seed: 101,
+  flecks: 42,
+  gradientTop: '#82d65a',
+  gradientBottom: '#5aa23b',
+});
+const texGrassSide = makeGrassSideTexture();
+const texDirt = makePixelTexture('#7a5435', { seed: 202, flecks: 38, gradientTop: '#8d6240', gradientBottom: '#6a472e' });
+const texStone = makePixelTexture('#8a8f97', { seed: 303, flecks: 44, gradientTop: '#9ea3aa', gradientBottom: '#787d86' });
+
+function makeBlockMaterials() {
+  const shared = { roughness: 1.0, metalness: 0.0 };
+  return {
+    grass: [
+      new THREE.MeshStandardMaterial({ map: texGrassSide, ...shared }),
+      new THREE.MeshStandardMaterial({ map: texGrassSide, ...shared }),
+      new THREE.MeshStandardMaterial({ map: texGrassTop, ...shared }),
+      new THREE.MeshStandardMaterial({ map: texDirt, ...shared }),
+      new THREE.MeshStandardMaterial({ map: texGrassSide, ...shared }),
+      new THREE.MeshStandardMaterial({ map: texGrassSide, ...shared }),
+    ],
+    dirt: new THREE.MeshStandardMaterial({ map: texDirt, ...shared }),
+    stone: new THREE.MeshStandardMaterial({ map: texStone, ...shared }),
+  };
+}
+
+const materials = makeBlockMaterials();
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const CHUNK_SIZE = 16;
 const CHUNK_RADIUS = 2;
 const chunks = new Map();
@@ -251,9 +368,20 @@ function keyForChunk(cx, cz) {
   return `${cx},${cz}`;
 }
 
+function makeInstanced(material, positions) {
+  const mesh = new THREE.InstancedMesh(boxGeo, material, positions.length);
+  let i = 0;
+  for (const [x, y, z] of positions) {
+    tempMatrix.makeTranslation(x, y, z);
+    mesh.setMatrixAt(i++, tempMatrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  return mesh;
+}
+
 function buildChunk(cx, cz) {
   const group = new THREE.Group();
-  const topPositions = [];
+  const grassPositions = [];
   const dirtPositions = [];
   const stonePositions = [];
 
@@ -266,27 +394,18 @@ function buildChunk(cx, cz) {
         const isTop = y === h - 1;
         const isDirt = y >= h - 3;
         const pos = [wx, y, wz];
-        if (isTop) topPositions.push(pos);
+        if (isTop) grassPositions.push(pos);
         else if (isDirt) dirtPositions.push(pos);
         else stonePositions.push(pos);
       }
     }
   }
 
-  function makeInstanced(material, positions) {
-    const mesh = new THREE.InstancedMesh(boxGeo, material, positions.length);
-    let i = 0;
-    for (const [x, y, z] of positions) {
-      tempMatrix.makeTranslation(x, y, z);
-      mesh.setMatrixAt(i++, tempMatrix);
-    }
-    mesh.instanceMatrix.needsUpdate = true;
-    group.add(mesh);
-  }
+  const grassMesh = makeInstanced(materials.grass, grassPositions);
+  const dirtMesh = makeInstanced(materials.dirt, dirtPositions);
+  const stoneMesh = makeInstanced(materials.stone, stonePositions);
 
-  makeInstanced(materialTop, topPositions);
-  makeInstanced(materialDirt, dirtPositions);
-  makeInstanced(materialStone, stonePositions);
+  group.add(grassMesh, dirtMesh, stoneMesh);
   scene.add(group);
   chunks.set(keyForChunk(cx, cz), group);
 }
@@ -417,7 +536,6 @@ function animate() {
   }
 
   camera.position.copy(player.pos);
-
   debug.textContent = `x ${player.pos.x.toFixed(1)}  y ${player.pos.y.toFixed(1)}  z ${player.pos.z.toFixed(1)}  chunks ${chunks.size}`;
   renderer.render(scene, camera);
 }
