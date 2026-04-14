@@ -298,8 +298,8 @@ function animate() {
   const input = new THREE.Vector3();
   if (keys.has('KeyW')) input.add(forward);
   if (keys.has('KeyS')) input.sub(forward);
-  if (keys.has('KeyD')) input.sub(right);
-  if (keys.has('KeyA')) input.add(right);
+  if (keys.has('KeyD')) input.add(right);
+  if (keys.has('KeyA')) input.sub(right);
   if (input.lengthSq() > 0) input.normalize();
 
   player.vel.x += input.x * accel * dt;
