@@ -122,9 +122,9 @@ const materialStone = new THREE.MeshStandardMaterial({ color: 0x8f939a, roughnes
 
 const CHUNK_SIZE = 16;
 const CHUNK_RADIUS = 2;
-const WATER_LEVEL = 2;
 const chunks = new Map();
 const tempMatrix = new THREE.Matrix4();
+const worldUp = new THREE.Vector3(0, 1, 0);
 
 function hash2(x, z) {
   const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453123;
@@ -219,7 +219,6 @@ function unloadFarChunks(centerCx, centerCz) {
     const [cx, cz] = key.split(',').map(Number);
     if (Math.abs(cx - centerCx) > CHUNK_RADIUS || Math.abs(cz - centerCz) > CHUNK_RADIUS) {
       scene.remove(group);
-      group.children.forEach((child) => child.dispose?.());
       chunks.delete(key);
     }
   }
@@ -284,13 +283,23 @@ function animate() {
   const accel = player.onGround ? 34 : 14;
   const drag = player.onGround ? 14 : 3;
 
-  const forward = new THREE.Vector3(Math.sin(player.yaw), 0, -Math.cos(player.yaw));
-  const right = new THREE.Vector3(Math.cos(player.yaw), 0, Math.sin(player.yaw));
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  forward.y = 0;
+  if (forward.lengthSq() > 0) forward.normalize();
+
+  const right = new THREE.Vector3();
+  right.crossVectors(forward, worldUp).normalize();
+
   const input = new THREE.Vector3();
   if (keys.has('KeyW')) input.add(forward);
   if (keys.has('KeyS')) input.sub(forward);
-  if (keys.has('KeyD')) input.add(right);
-  if (keys.has('KeyA')) input.sub(right);
+  if (keys.has('KeyD')) input.sub(right);
+  if (keys.has('KeyA')) input.add(right);
   if (input.lengthSq() > 0) input.normalize();
 
   player.vel.x += input.x * accel * dt;
@@ -331,9 +340,6 @@ function animate() {
   }
 
   camera.position.copy(player.pos);
-  camera.rotation.order = 'YXZ';
-  camera.rotation.y = player.yaw;
-  camera.rotation.x = player.pitch;
 
   debug.textContent = `x ${player.pos.x.toFixed(1)}  y ${player.pos.y.toFixed(1)}  z ${player.pos.z.toFixed(1)}  chunks ${chunks.size}`;
   renderer.render(scene, camera);
